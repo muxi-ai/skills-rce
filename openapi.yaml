@@ -14,7 +14,7 @@ info:
     skill context.
 
 servers:
-  - url: http://localhost:5580
+  - url: http://localhost:7891
 
 tags:
   - name: Health

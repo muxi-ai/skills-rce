@@ -7,25 +7,25 @@ Ships as `muxi/skills-rce` Docker image. Any agent runtime that speaks HTTP can 
 ## Quick Start
 
 ```bash
-docker run -d -p 5580:5580 muxi/skills-rce:latest
+docker run -d -p 7891:7891 muxi/skills-rce:latest
 ```
 
 ```bash
 # Health check
-curl http://localhost:5580/health
+curl http://localhost:7891/health
 
 # Run ad-hoc code
-curl -X POST http://localhost:5580/run \
+curl -X POST http://localhost:7891/run \
   -H "Content-Type: application/json" \
   -d '{"id": "test-1", "language": "python", "code": "print(40 + 2)"}'
 
 # Upload a skill
-curl -X POST http://localhost:5580/skill/my-skill \
+curl -X POST http://localhost:7891/skill/my-skill \
   -H "Content-Type: application/json" \
   -d '{"hash": "sha256:abc...", "files": {"SKILL.md": "<base64>", "scripts/run.py": "<base64>"}}'
 
 # Execute against cached skill
-curl -X POST http://localhost:5580/skill/my-skill/run \
+curl -X POST http://localhost:7891/skill/my-skill/run \
   -H "Content-Type: application/json" \
   -d '{"id": "test-2", "command": "python scripts/run.py input.csv", "input_files": {"input.csv": "<base64>"}}'
 ```
@@ -134,7 +134,7 @@ The image ships with pre-cached skills:
 ```yaml
 # formation.yaml
 rce:
-  url: "http://localhost:5580"
+  url: "http://localhost:7891"
   auth:
     type: "bearer"
     token: "${{ secrets.RCE_TOKEN }}"

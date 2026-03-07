@@ -16,7 +16,7 @@ type Config struct {
 
 func Load() *Config {
 	cfg := &Config{
-		Port:           5580,
+		Port:           7891,
 		CacheDir:       "/cache/skills",
 		DefaultTimeout: 30,
 		MaxTimeout:     300,

@@ -95,9 +95,9 @@ COPY --from=go-builder /build/skills-rce /usr/local/bin/skills-rce
 
 RUN mkdir -p /cache/skills
 
-EXPOSE 5580
+EXPOSE 7891
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=10s \
-    CMD curl -f http://localhost:5580/health || exit 1
+    CMD curl -f http://localhost:7891/health || exit 1
 
 ENTRYPOINT ["skills-rce"]
