@@ -1,40 +1,106 @@
 # Skills RCE
 
-A standalone code execution service for AI agents. Runs code in isolated containers with skill directory caching -- upload a skill once, execute against it many times.
+Code execution service for AI agent skills. Runs scripts in isolated subprocesses with skill directory caching -- upload a skill once, execute against it many times.
 
-Ships as `muxi/skills-rce` Docker image. Any agent runtime that speaks HTTP can use it.
+This repo contains three things:
 
-## Quick Start
+1. **The RCE server** -- a standalone Go binary that exposes an HTTP API for code execution. Install it anywhere, point your agent runtime at it.
+2. **A Docker image** (`muxi/skills-rce`) -- bundles the server with Python, Bun, Node.js, Go, and common packages used by agent skills. Ready to run.
+3. **A SIF image** (coming soon) -- packages the Docker image as a Singularity container for native Linux execution without Docker.
+
+## The Server
+
+The server is a single Go binary. Build it yourself or grab it from the Docker image:
+
+```bash
+cd src && go build -o skills-rce ./cmd/rce
+./skills-rce
+```
+
+It listens on port 7891 by default and exposes 7 endpoints. The server doesn't care what runtimes are installed -- it shells out to whatever is available on the host. If Python isn't installed, Python jobs will fail. The Docker image solves this by bundling everything.
+
+### Configuration
+
+All via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RCE_PORT` | `7891` | Listen port |
+| `RCE_CACHE_DIR` | `/cache/skills` | Skill cache directory |
+| `RCE_DEFAULT_TIMEOUT` | `30` | Default job timeout (seconds) |
+| `RCE_MAX_TIMEOUT` | `300` | Maximum allowed timeout |
+| `RCE_AUTH_TOKEN` | (none) | Bearer token for all non-health endpoints |
+
+### Authentication
+
+Set `RCE_AUTH_TOKEN` to require a bearer token on all endpoints except `/health`:
+
+```bash
+RCE_AUTH_TOKEN=my-secret ./skills-rce
+```
+
+```bash
+curl -H "Authorization: Bearer my-secret" http://localhost:7891/run ...
+```
+
+## Docker Image
 
 ```bash
 docker run -d -p 7891:7891 muxi/skills-rce:latest
 ```
 
-```bash
-# Health check
-curl http://localhost:7891/health
+The image bundles the server with runtimes and packages commonly used by agent skills.
 
-# Run ad-hoc code
-curl -X POST http://localhost:7891/run \
-  -H "Content-Type: application/json" \
-  -d '{"id": "test-1", "language": "python", "code": "print(40 + 2)"}'
+### Runtimes
 
-# Upload a skill
-curl -X POST http://localhost:7891/skill/my-skill \
-  -H "Content-Type: application/json" \
-  -d '{"hash": "sha256:abc...", "files": {"SKILL.md": "<base64>", "scripts/run.py": "<base64>"}}'
+| Runtime | Version | Languages |
+|---------|---------|-----------|
+| Python | 3.11 | python |
+| Bun | latest | javascript, typescript |
+| Node.js | 20 | (npx, npm) |
+| Go | 1.26 | go |
+| Bash | 5.1 | bash |
+| Perl | 5.34 | perl |
 
-# Execute against cached skill
-curl -X POST http://localhost:7891/skill/my-skill/run \
-  -H "Content-Type: application/json" \
-  -d '{"id": "test-2", "command": "python scripts/run.py input.csv", "input_files": {"input.csv": "<base64>"}}'
-```
+Also includes: `uv`, `pip`, `npx`, `npm`.
+
+### Python Packages
+
+**Data & analysis:** numpy, pandas, scipy, scikit-learn, statsmodels, sympy
+
+**Visualization:** matplotlib, seaborn, plotly, bokeh, altair
+
+**PDF:** pypdf, pdfplumber, reportlab, fpdf2
+
+**Office docs:** python-docx, openpyxl, python-pptx, xlsxwriter, xlrd, xlwt
+
+**Image:** pillow, pytesseract, pdf2image, qrcode, python-barcode
+
+**HTML/XML:** beautifulsoup4, markdownify, lxml, Markdown
+
+**HTTP:** requests, httpx, aiofiles
+
+**General:** pyyaml, jinja2, tabulate, chardet, orjson, python-magic, cryptography
+
+### JS/TS Packages
+
+lodash, axios, cheerio, sharp, csv-parse, date-fns, zod, marked, uuid, yaml, jsonwebtoken, chalk, node-fetch, papaparse, jsdom, commander
+
+### System Tools
+
+curl, wget, git, ffmpeg, imagemagick, poppler-utils, qpdf, tesseract-ocr
+
+## SIF Image
+
+> Coming soon.
+
+A Singularity Image Format (SIF) build of the Docker image for running on Linux without Docker. Useful for bare-metal deployments and HPC environments where Docker isn't available.
 
 ## API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check, runtime detection, system resources |
 | POST | `/run` | Execute ad-hoc code |
 | POST | `/skill/{id}` | Upload/cache a skill directory |
 | GET | `/skill/{id}` | Check cache status + hash |
@@ -42,15 +108,54 @@ curl -X POST http://localhost:7891/skill/my-skill/run \
 | DELETE | `/skill/{id}` | Remove cached skill |
 | POST | `/skill/{id}/run` | Execute command against cached skill |
 
-### POST /run
+See [openapi.yaml](openapi.yaml) for the full spec.
 
-Execute code with no skill context.
+### GET /health
+
+Returns detected runtimes, available languages, system resources, and cached skills:
 
 ```json
 {
-  "id": "job-abc123",
+  "status": "healthy",
+  "version": "0.1.0",
+  "runtimes": [
+    {"name": "python", "version": "3.11.0"},
+    {"name": "bun", "version": "1.3.10"},
+    {"name": "bash", "version": "5.1.16"},
+    {"name": "go", "version": "1.26.1"},
+    {"name": "node", "version": "20.20.1"},
+    {"name": "npx", "version": "10.8.2"},
+    {"name": "uv", "version": "0.10.9"},
+    {"name": "pip", "version": "22.0.2"}
+  ],
+  "languages": ["python", "javascript", "typescript", "bash", "go", "perl"],
+  "resources": {
+    "cpus": 4,
+    "memory_mb": 8192,
+    "disk_mb": 20480
+  },
+  "cached_skills": [],
+  "uptime_seconds": 120
+}
+```
+
+Runtimes with `"version": null` are not installed. Languages are derived from detected runtimes.
+
+### POST /run
+
+Execute a script with no skill context:
+
+```bash
+curl -X POST http://localhost:7891/run \
+  -H "Content-Type: application/json" \
+  -d '{"id": "test-1", "language": "python", "code": "print(40 + 2)"}'
+```
+
+```json
+{
+  "id": "test-1",
   "language": "python",
-  "code": "import pandas as pd\nprint(pd.DataFrame({'a': [1,2,3]}).to_json())",
+  "code": "print(40 + 2)",
   "files": {},
   "timeout": 30,
   "env": {}
@@ -59,33 +164,22 @@ Execute code with no skill context.
 
 ### POST /skill/{id}
 
-Cache a skill directory. Files are stored with their directory structure preserved.
+Upload a skill directory. Files are stored with directory structure preserved:
 
-```json
-{
-  "hash": "sha256:abc123...",
-  "files": {
-    "SKILL.md": "<base64>",
-    "scripts/extract.py": "<base64>",
-    "scripts/utils.py": "<base64>",
-    "references/spec.md": "<base64>"
-  }
-}
+```bash
+curl -X POST http://localhost:7891/skill/my-skill \
+  -H "Content-Type: application/json" \
+  -d '{"hash": "sha256:abc...", "files": {"SKILL.md": "<base64>", "scripts/run.py": "<base64>"}}'
 ```
 
 ### POST /skill/{id}/run
 
-Execute a command against a cached skill. Only sends the command and input files -- the skill directory is already on the server.
+Execute a command against a cached skill. Only sends the command and input files -- the skill directory is already on the server:
 
-```json
-{
-  "id": "job-def456",
-  "command": "python scripts/extract.py input.pdf",
-  "input_files": {
-    "input.pdf": "<base64>"
-  },
-  "timeout": 60
-}
+```bash
+curl -X POST http://localhost:7891/skill/my-skill/run \
+  -H "Content-Type: application/json" \
+  -d '{"id": "test-2", "command": "python scripts/run.py input.csv", "input_files": {"input.csv": "<base64>"}}'
 ```
 
 ### Response Format
@@ -111,23 +205,9 @@ All execution endpoints return:
 }
 ```
 
-`status` is one of `success`, `error`, or `timeout`.
+`status` is `success`, `error`, or `timeout`.
 
-## Built-in Skills
-
-The image ships with pre-cached skills:
-
-- **`generate-file`** -- Generate files (charts, documents, images) via Python code execution. Includes constraints and library preferences for reliable artifact generation.
-
-## Pre-installed Languages and Packages
-
-**Languages:** Python 3.11, Node.js 20, Bash
-
-**Python packages:** numpy, pandas, matplotlib, seaborn, plotly, pypdf, pdfplumber, reportlab, python-docx, openpyxl, python-pptx, pillow, pytesseract, pdf2image, beautifulsoup4, requests, httpx, scipy, scikit-learn
-
-**System tools:** curl, wget, git, ffmpeg, imagemagick, poppler-utils, qpdf, tesseract-ocr
-
-## Configuration
+## MUXI Integration
 
 ### With MUXI Runtime
 
@@ -142,11 +222,7 @@ rce:
 
 ### With MUXI Server
 
-Server formations get the built-in Skills RCE automatically. Only configure `rce` if you need a custom instance (specific packages, GPU, etc.).
-
-### Authentication
-
-Optional. Supports `bearer`, `header`, `basic`, or `none` (default).
+Server formations get Skills RCE automatically. Only configure `rce` if you need a custom instance (specific packages, GPU, etc.).
 
 ## Security
 
