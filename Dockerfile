@@ -25,6 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
+# Pre-installed JS/TS packages available to all scripts
+RUN mkdir -p /opt/bun-packages && cd /opt/bun-packages && \
+    bun init -y && \
+    bun add \
+    lodash axios cheerio sharp csv-parse date-fns zod marked \
+    uuid yaml jsonwebtoken chalk node-fetch papaparse jsdom commander
+ENV NODE_PATH="/opt/bun-packages/node_modules"
+
 # Python packages -- data, viz, docs, general purpose
 RUN pip3 install --no-cache-dir --break-system-packages \
     # Data and analysis
