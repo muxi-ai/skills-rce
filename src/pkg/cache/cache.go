@@ -1,10 +1,14 @@
 package cache
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -50,6 +54,27 @@ func (m *Manager) List() []string {
 	return names
 }
 
+func (m *Manager) UploadZip(name, hash string, zipData []byte) (*SkillInfo, error) {
+	dir := m.skillDir(name)
+	if err := os.RemoveAll(dir); err != nil {
+		return nil, fmt.Errorf("clean skill dir: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("create skill dir: %w", err)
+	}
+
+	count, err := m.extractZip(dir, zipData)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &SkillInfo{Name: name, Hash: hash, FileCount: count}
+	m.mu.Lock()
+	m.skills[name] = info
+	m.mu.Unlock()
+	return info, nil
+}
+
 func (m *Manager) Upload(name, hash string, files map[string]string) (*SkillInfo, error) {
 	dir := m.skillDir(name)
 	if err := os.RemoveAll(dir); err != nil {
@@ -64,6 +89,27 @@ func (m *Manager) Upload(name, hash string, files map[string]string) (*SkillInfo
 	}
 
 	info := &SkillInfo{Name: name, Hash: hash, FileCount: len(files)}
+	m.mu.Lock()
+	m.skills[name] = info
+	m.mu.Unlock()
+	return info, nil
+}
+
+func (m *Manager) UpdateZip(name, hash string, zipData []byte) (*SkillInfo, error) {
+	m.mu.RLock()
+	existing := m.skills[name]
+	m.mu.RUnlock()
+	if existing == nil {
+		return nil, nil
+	}
+
+	dir := m.skillDir(name)
+	if _, err := m.extractZip(dir, zipData); err != nil {
+		return nil, err
+	}
+
+	count := m.countFiles(dir)
+	info := &SkillInfo{Name: name, Hash: hash, FileCount: count}
 	m.mu.Lock()
 	m.skills[name] = info
 	m.mu.Unlock()
@@ -135,4 +181,47 @@ func (m *Manager) countFiles(dir string) int {
 		return nil
 	})
 	return count
+}
+
+func (m *Manager) extractZip(dir string, zipData []byte) (int, error) {
+	r, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return 0, fmt.Errorf("open zip: %w", err)
+	}
+
+	count := 0
+	for _, f := range r.File {
+		// Sanitize: reject absolute paths and path traversal
+		name := filepath.Clean(f.Name)
+		if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "..") {
+			continue
+		}
+		fullPath := filepath.Join(dir, name)
+
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fullPath, 0755)
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			return 0, fmt.Errorf("create parent dirs for %s: %w", name, err)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return 0, fmt.Errorf("open zip entry %s: %w", name, err)
+		}
+
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return 0, fmt.Errorf("read zip entry %s: %w", name, err)
+		}
+
+		if err := os.WriteFile(fullPath, data, 0644); err != nil {
+			return 0, fmt.Errorf("write %s: %w", name, err)
+		}
+		count++
+	}
+	return count, nil
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -120,27 +121,45 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
-	var req struct {
-		Hash  string            `json:"hash"`
-		Files map[string]string `json:"files"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-	if req.Hash == "" || len(req.Files) == 0 {
-		RespondError(w, http.StatusBadRequest, "hash and files are required")
-		return
+
+	var info *cache.SkillInfo
+	var err error
+
+	if isZipUpload(r) {
+		hash := r.URL.Query().Get("hash")
+		if hash == "" {
+			RespondError(w, http.StatusBadRequest, "hash query parameter is required for zip uploads")
+			return
+		}
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			RespondError(w, http.StatusBadRequest, "failed to read request body")
+			return
+		}
+		info, err = s.cache.UploadZip(id, hash, body)
+	} else {
+		var req struct {
+			Hash  string            `json:"hash"`
+			Files map[string]string `json:"files"`
+		}
+		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+			RespondError(w, http.StatusBadRequest, "invalid JSON: "+decErr.Error())
+			return
+		}
+		if req.Hash == "" || len(req.Files) == 0 {
+			RespondError(w, http.StatusBadRequest, "hash and files are required")
+			return
+		}
+		info, err = s.cache.Upload(id, req.Hash, req.Files)
 	}
 
-	info, err := s.cache.Upload(id, req.Hash, req.Files)
 	if err != nil {
 		s.logger.Error().Err(err).Str("skill", id).Msg("skill upload failed")
 		RespondError(w, http.StatusInternalServerError, "upload failed: "+err.Error())
 		return
 	}
 
-	s.logger.Info().Str("skill", id).Str("hash", req.Hash).Int("files", info.FileCount).Msg("skill cached")
+	s.logger.Info().Str("skill", id).Str("hash", info.Hash).Int("files", info.FileCount).Msg("skill cached")
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"name":       info.Name,
 		"hash":       info.Hash,
@@ -169,20 +188,38 @@ func (s *Server) handleSkillGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSkillUpdate(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
-	var req struct {
-		Hash  string            `json:"hash"`
-		Files map[string]string `json:"files"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-	if req.Hash == "" || len(req.Files) == 0 {
-		RespondError(w, http.StatusBadRequest, "hash and files are required")
-		return
+
+	var info *cache.SkillInfo
+	var err error
+
+	if isZipUpload(r) {
+		hash := r.URL.Query().Get("hash")
+		if hash == "" {
+			RespondError(w, http.StatusBadRequest, "hash query parameter is required for zip uploads")
+			return
+		}
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			RespondError(w, http.StatusBadRequest, "failed to read request body")
+			return
+		}
+		info, err = s.cache.UpdateZip(id, hash, body)
+	} else {
+		var req struct {
+			Hash  string            `json:"hash"`
+			Files map[string]string `json:"files"`
+		}
+		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+			RespondError(w, http.StatusBadRequest, "invalid JSON: "+decErr.Error())
+			return
+		}
+		if req.Hash == "" || len(req.Files) == 0 {
+			RespondError(w, http.StatusBadRequest, "hash and files are required")
+			return
+		}
+		info, err = s.cache.Update(id, req.Hash, req.Files)
 	}
 
-	info, err := s.cache.Update(id, req.Hash, req.Files)
 	if err != nil {
 		s.logger.Error().Err(err).Str("skill", id).Msg("skill update failed")
 		RespondError(w, http.StatusInternalServerError, "update failed: "+err.Error())
@@ -193,7 +230,7 @@ func (s *Server) handleSkillUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Info().Str("skill", id).Str("hash", req.Hash).Msg("skill updated")
+	s.logger.Info().Str("skill", id).Str("hash", info.Hash).Msg("skill updated")
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"name":       info.Name,
 		"hash":       info.Hash,

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -344,5 +345,118 @@ func TestPatchNotCached(t *testing.T) {
 
 	if w.Code != 404 {
 		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func makeZip(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		f, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Write([]byte(content))
+	}
+	zw.Close()
+	return buf.Bytes()
+}
+
+func TestZipUpload(t *testing.T) {
+	s := setupTestServer(t)
+	zipData := makeZip(t, map[string]string{
+		"run.py":  "print('hello')",
+		"util.py": "x = 1",
+	})
+
+	req := httptest.NewRequest("POST", "/skill/zip-skill?hash=sha256:abc123", bytes.NewReader(zipData))
+	req.Header.Set("Content-Type", "application/zip")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["status"] != "cached" {
+		t.Fatalf("expected cached, got %v", resp["status"])
+	}
+	if int(resp["file_count"].(float64)) != 2 {
+		t.Fatalf("expected 2 files, got %v", resp["file_count"])
+	}
+}
+
+func TestZipUploadMissingHash(t *testing.T) {
+	s := setupTestServer(t)
+	zipData := makeZip(t, map[string]string{"f.txt": "x"})
+
+	req := httptest.NewRequest("POST", "/skill/zip-skill", bytes.NewReader(zipData))
+	req.Header.Set("Content-Type", "application/zip")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestZipPatch(t *testing.T) {
+	s := setupTestServer(t)
+
+	// First upload via JSON
+	files := map[string]string{
+		"run.py": base64.StdEncoding.EncodeToString([]byte("print('v1')")),
+	}
+	body := map[string]interface{}{
+		"hash":  "sha256:v1",
+		"files": files,
+	}
+	b2, _ := json.Marshal(body)
+	uploadReq := httptest.NewRequest("POST", "/skill/patch-zip-skill", bytes.NewReader(b2))
+	uploadReq.Header.Set("Content-Type", "application/json")
+	uw := httptest.NewRecorder()
+	s.Handler().ServeHTTP(uw, uploadReq)
+	if uw.Code != 200 {
+		t.Fatalf("upload failed: %d: %s", uw.Code, uw.Body.String())
+	}
+
+	// PATCH with zip
+	zipData := makeZip(t, map[string]string{
+		"run.py":  "print('v2')",
+		"new.txt": "added",
+	})
+	patchReq := httptest.NewRequest("PATCH", "/skill/patch-zip-skill?hash=sha256:v2", bytes.NewReader(zipData))
+	patchReq.Header.Set("Content-Type", "application/zip")
+	pw := httptest.NewRecorder()
+	s.Handler().ServeHTTP(pw, patchReq)
+
+	if pw.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", pw.Code, pw.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(pw.Body.Bytes(), &resp)
+	if resp["status"] != "updated" {
+		t.Fatalf("expected updated, got %v", resp["status"])
+	}
+	if int(resp["file_count"].(float64)) != 2 {
+		t.Fatalf("expected 2 files, got %v", resp["file_count"])
+	}
+}
+
+func TestZipPatchNotCached(t *testing.T) {
+	s := setupTestServer(t)
+	zipData := makeZip(t, map[string]string{"f.txt": "x"})
+
+	patchReq := httptest.NewRequest("PATCH", "/skill/nonexistent?hash=sha256:abc", bytes.NewReader(zipData))
+	patchReq.Header.Set("Content-Type", "application/zip")
+	pw := httptest.NewRecorder()
+	s.Handler().ServeHTTP(pw, patchReq)
+
+	if pw.Code != 404 {
+		t.Fatalf("expected 404, got %d", pw.Code)
 	}
 }

@@ -155,6 +155,10 @@ paths:
         Caches the provided files on disk under the given skill id. If the skill
         already exists it's fully replaced. The `hash` field lets callers skip
         re-uploading when the content hasn't changed (compare with GET first).
+
+        Accepts two content types:
+        - `application/json` -- files as a map of path → base64 content, hash in body
+        - `application/zip` -- raw zip archive as body, hash as `?hash=` query parameter
       requestBody:
         required: true
         content:
@@ -166,6 +170,11 @@ paths:
               files:
                 "SKILL.md": "IyBNeSBTa2lsbA=="
                 "scripts/run.py": "cHJpbnQoJ2hpJyk="
+          application/zip:
+            schema:
+              type: string
+              format: binary
+              description: Zip archive of the skill directory. Pass hash as query parameter.
       responses:
         "200":
           description: Skill cached
@@ -216,12 +225,21 @@ paths:
         Overwrites only the listed files without touching the rest.
         Useful when a single script changed and you don't want to re-upload
         the whole directory.
+
+        Accepts two content types:
+        - `application/json` -- files as a map of path → base64 content, hash in body
+        - `application/zip` -- raw zip archive as body, hash as `?hash=` query parameter
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/SkillUpdateRequest"
+          application/zip:
+            schema:
+              type: string
+              format: binary
+              description: Zip archive of files to patch. Pass hash as query parameter.
       responses:
         "200":
           description: Skill updated
