@@ -51,7 +51,6 @@ type Result struct {
 
 var languageCommands = map[string]string{
 	"python":     "python3",
-	"node":       "bun",
 	"javascript": "bun",
 	"typescript": "bun",
 	"bash":       "bash",
@@ -65,7 +64,6 @@ var languageCommands = map[string]string{
 
 var languageExtensions = map[string]string{
 	"python":     ".py",
-	"node":       ".js",
 	"javascript": ".js",
 	"typescript": ".ts",
 	"bash":       ".sh",

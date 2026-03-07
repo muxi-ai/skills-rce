@@ -68,7 +68,15 @@ paths:
                     version: null
                   - name: r
                     version: null
-                languages: [python, javascript, typescript, node, bash]
+                  - name: node
+                    version: null
+                  - name: npx
+                    version: null
+                  - name: uv
+                    version: null
+                  - name: pip
+                    version: null
+                languages: [python, javascript, typescript, bash]
                 resources:
                   cpus: 2
                   memory_mb: 4096
@@ -331,7 +339,7 @@ components:
       properties:
         name:
           type: string
-          description: Runtime name (python, bun, bash, go, php, ruby, perl, lua, r)
+          description: Runtime or tool name (python, bun, bash, go, php, ruby, perl, lua, r, node, npx, uv, pip)
         version:
           type: string
           nullable: true
@@ -361,7 +369,7 @@ components:
           description: Caller-provided job id, echoed back in the response
         language:
           type: string
-          enum: [python, node, javascript, typescript, bash, php, ruby, go, perl, lua, r]
+          enum: [python, javascript, typescript, bash, php, ruby, go, perl, lua, r]
           description: Which runtime to use
         code:
           type: string

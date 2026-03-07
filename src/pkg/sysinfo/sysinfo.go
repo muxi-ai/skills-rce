@@ -25,13 +25,14 @@ type Info struct {
 }
 
 var runtimeProbes = []struct {
-	name    string
-	bin     string
-	args    []string
-	langs   []string
+	name  string
+	bin   string
+	args  []string
+	langs []string // languages this runtime enables
 }{
+	// Language runtimes
 	{"python", "python3", []string{"--version"}, []string{"python"}},
-	{"bun", "bun", []string{"--version"}, []string{"javascript", "typescript", "node"}},
+	{"bun", "bun", []string{"--version"}, []string{"javascript", "typescript"}},
 	{"bash", "bash", []string{"--version"}, []string{"bash"}},
 	{"go", "go", []string{"version"}, []string{"go"}},
 	{"php", "php", []string{"--version"}, []string{"php"}},
@@ -39,6 +40,11 @@ var runtimeProbes = []struct {
 	{"perl", "perl", []string{"--version"}, []string{"perl"}},
 	{"lua", "lua", []string{"-v"}, []string{"lua"}},
 	{"r", "Rscript", []string{"--version"}, []string{"r"}},
+	// Tools (no languages, just presence detection)
+	{"node", "node", []string{"--version"}, nil},
+	{"npx", "npx", []string{"--version"}, nil},
+	{"uv", "uv", []string{"--version"}, nil},
+	{"pip", "pip3", []string{"--version"}, nil},
 }
 
 func Detect() *Info {
@@ -50,7 +56,9 @@ func Detect() *Info {
 		if err == nil {
 			v := parseVersion(probe.name, strings.TrimSpace(string(out)))
 			rt.Version = &v
-			info.Languages = append(info.Languages, probe.langs...)
+			if probe.langs != nil {
+				info.Languages = append(info.Languages, probe.langs...)
+			}
 		}
 		info.Runtimes = append(info.Runtimes, rt)
 	}
@@ -119,6 +127,19 @@ func parseVersion(name, raw string) string {
 				return p
 			}
 		}
+	case "uv":
+		// "uv 0.4.18" -> "0.4.18"
+		if parts := strings.Fields(raw); len(parts) >= 2 {
+			return parts[1]
+		}
+	case "pip":
+		// "pip 22.0.2 from /usr/lib/..." -> "22.0.2"
+		if parts := strings.Fields(raw); len(parts) >= 2 {
+			return parts[1]
+		}
+	case "node", "npx":
+		// "v20.11.1" -> "20.11.1"
+		return strings.TrimPrefix(raw, "v")
 	}
 	return strings.Split(raw, "\n")[0]
 }
