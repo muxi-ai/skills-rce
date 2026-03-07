@@ -58,6 +58,9 @@ var languageCommands = map[string]string{
 	"php":        "php",
 	"ruby":       "ruby",
 	"go":         "go run",
+	"perl":       "perl",
+	"lua":        "lua",
+	"r":          "Rscript",
 }
 
 var languageExtensions = map[string]string{
@@ -69,6 +72,9 @@ var languageExtensions = map[string]string{
 	"php":        ".php",
 	"ruby":       ".rb",
 	"go":         ".go",
+	"perl":       ".pl",
+	"lua":        ".lua",
+	"r":          ".R",
 }
 
 func Run(req *RunRequest) *Result {

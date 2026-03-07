@@ -11,6 +11,7 @@ import (
 	"github.com/muxi-ai/skills-rce/pkg/cache"
 	"github.com/muxi-ai/skills-rce/pkg/config"
 	"github.com/muxi-ai/skills-rce/pkg/executor"
+	"github.com/muxi-ai/skills-rce/pkg/sysinfo"
 )
 
 type Server struct {
@@ -20,6 +21,7 @@ type Server struct {
 	logger    *zerolog.Logger
 	startTime time.Time
 	version   string
+	sysinfo   *sysinfo.Info
 }
 
 func NewServer(cfg *config.Config, cm *cache.Manager, logger *zerolog.Logger, version string) *Server {
@@ -30,6 +32,7 @@ func NewServer(cfg *config.Config, cm *cache.Manager, logger *zerolog.Logger, ve
 		logger:    logger,
 		startTime: time.Now(),
 		version:   version,
+		sysinfo:   sysinfo.Detect(),
 	}
 	s.setupRoutes()
 	return s
@@ -57,10 +60,12 @@ func (s *Server) setupRoutes() {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	uptime := int(time.Since(s.startTime).Seconds())
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"status":        "healthy",
-		"version":       s.version,
-		"languages":     []string{"python", "javascript", "typescript", "bash"},
-		"cached_skills": s.cache.List(),
+		"status":         "healthy",
+		"version":        s.version,
+		"runtimes":       s.sysinfo.Runtimes,
+		"languages":      s.sysinfo.Languages,
+		"resources":      s.sysinfo.Resources,
+		"cached_skills":  s.cache.List(),
 		"uptime_seconds": uptime,
 	})
 }

@@ -36,7 +36,8 @@ paths:
       operationId: getHealth
       summary: Health check
       description: |-
-        Returns service status, supported languages, and which skills are
+        Returns service status, detected runtimes and their versions,
+        supported languages, system resources, and which skills are
         currently cached. Always unauthenticated.
       responses:
         "200":
@@ -48,8 +49,31 @@ paths:
               example:
                 status: healthy
                 version: "0.1.0"
-                languages: [python, node, bash]
-                cached_skills: [generate-file]
+                runtimes:
+                  - name: python
+                    version: "3.11.0"
+                  - name: bun
+                    version: "1.1.30"
+                  - name: bash
+                    version: "5.1.16"
+                  - name: go
+                    version: null
+                  - name: php
+                    version: null
+                  - name: ruby
+                    version: null
+                  - name: perl
+                    version: null
+                  - name: lua
+                    version: null
+                  - name: r
+                    version: null
+                languages: [python, javascript, typescript, node, bash]
+                resources:
+                  cpus: 2
+                  memory_mb: 4096
+                  disk_mb: 20480
+                cached_skills: []
                 uptime_seconds: 3600
 
   # --- Ad-hoc execution ----------------------------------------------------
@@ -272,7 +296,7 @@ components:
     # --- Health ---
     HealthResponse:
       type: object
-      required: [status, version, languages, cached_skills, uptime_seconds]
+      required: [status, version, runtimes, languages, resources, cached_skills, uptime_seconds]
       properties:
         status:
           type: string
@@ -280,11 +304,18 @@ components:
         version:
           type: string
           example: "0.1.0"
+        runtimes:
+          type: array
+          description: Detected runtimes and their versions (null if not installed)
+          items:
+            $ref: "#/components/schemas/RuntimeInfo"
         languages:
           type: array
           items:
             type: string
-          description: Language runtimes available on this instance
+          description: Languages available based on detected runtimes
+        resources:
+          $ref: "#/components/schemas/ResourceInfo"
         cached_skills:
           type: array
           items:
@@ -293,6 +324,32 @@ components:
         uptime_seconds:
           type: integer
           minimum: 0
+
+    RuntimeInfo:
+      type: object
+      required: [name, version]
+      properties:
+        name:
+          type: string
+          description: Runtime name (python, bun, bash, go, php, ruby, perl, lua, r)
+        version:
+          type: string
+          nullable: true
+          description: Detected version, or null if not installed
+
+    ResourceInfo:
+      type: object
+      required: [cpus, memory_mb, disk_mb]
+      properties:
+        cpus:
+          type: integer
+          description: Number of CPU cores available
+        memory_mb:
+          type: integer
+          description: Total system memory in megabytes
+        disk_mb:
+          type: integer
+          description: Available disk space in megabytes
 
     # --- Ad-hoc execution ---
     RunRequest:
@@ -304,7 +361,7 @@ components:
           description: Caller-provided job id, echoed back in the response
         language:
           type: string
-          enum: [python, node, javascript, typescript, bash, php, ruby, go]
+          enum: [python, node, javascript, typescript, bash, php, ruby, go, perl, lua, r]
           description: Which runtime to use
         code:
           type: string
