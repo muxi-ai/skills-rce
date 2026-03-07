@@ -36,11 +36,11 @@ curl -X POST http://localhost:5580/skill/my-skill/run \
 |--------|----------|-------------|
 | GET | `/health` | Health check |
 | POST | `/run` | Execute ad-hoc code |
-| POST | `/skill/{name}` | Upload/cache a skill directory |
-| GET | `/skill/{name}` | Check cache status + hash |
-| PATCH | `/skill/{name}` | Update specific files in cached skill |
-| DELETE | `/skill/{name}` | Remove cached skill |
-| POST | `/skill/{name}/run` | Execute command against cached skill |
+| POST | `/skill/{id}` | Upload/cache a skill directory |
+| GET | `/skill/{id}` | Check cache status + hash |
+| PATCH | `/skill/{id}` | Update specific files in cached skill |
+| DELETE | `/skill/{id}` | Remove cached skill |
+| POST | `/skill/{id}/run` | Execute command against cached skill |
 
 ### POST /run
 
@@ -57,7 +57,7 @@ Execute code with no skill context.
 }
 ```
 
-### POST /skill/{name}
+### POST /skill/{id}
 
 Cache a skill directory. Files are stored with their directory structure preserved.
 
@@ -73,7 +73,7 @@ Cache a skill directory. Files are stored with their directory structure preserv
 }
 ```
 
-### POST /skill/{name}/run
+### POST /skill/{id}/run
 
 Execute a command against a cached skill. Only sends the command and input files -- the skill directory is already on the server.
 
