@@ -50,21 +50,25 @@ type Result struct {
 }
 
 var languageCommands = map[string]string{
-	"python": "python3",
-	"node":   "node",
-	"bash":   "bash",
-	"php":    "php",
-	"ruby":   "ruby",
-	"go":     "go run",
+	"python":     "python3",
+	"node":       "bun",
+	"javascript": "bun",
+	"typescript": "bun",
+	"bash":       "bash",
+	"php":        "php",
+	"ruby":       "ruby",
+	"go":         "go run",
 }
 
 var languageExtensions = map[string]string{
-	"python": ".py",
-	"node":   ".js",
-	"bash":   ".sh",
-	"php":    ".php",
-	"ruby":   ".rb",
-	"go":     ".go",
+	"python":     ".py",
+	"node":       ".js",
+	"javascript": ".js",
+	"typescript": ".ts",
+	"bash":       ".sh",
+	"php":        ".php",
+	"ruby":       ".rb",
+	"go":         ".go",
 }
 
 func Run(req *RunRequest) *Result {

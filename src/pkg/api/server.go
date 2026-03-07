@@ -59,7 +59,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":        "healthy",
 		"version":       s.version,
-		"languages":     []string{"python", "node", "bash"},
+		"languages":     []string{"python", "javascript", "typescript", "bash"},
 		"cached_skills": s.cache.List(),
 		"uptime_seconds": uptime,
 	})
