@@ -72,7 +72,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget git ca-certificates \
     poppler-utils qpdf tesseract-ocr \
     ffmpeg imagemagick \
-    python3.11 python3.11-venv \
+    python3.11 python3.11-venv python3-pip \
     libmagic1 \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
@@ -80,6 +80,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && find /usr/share/doc -depth -type f ! -name copyright -delete 2>/dev/null || true \
     && find /usr/share/doc -empty -delete 2>/dev/null || true \
     && rm -rf /usr/share/man /usr/share/info /usr/share/lintian
+
+# Node.js 20 (for npx and node compatibility)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv (fast Python package manager)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Copy Python packages (no pip, no dev headers in final image)
 COPY --from=python-builder /install /usr/local/lib/python3.11/dist-packages
@@ -92,6 +101,10 @@ ENV NODE_PATH="/opt/bun-packages/node_modules"
 
 # Copy Go binary
 COPY --from=go-builder /build/skills-rce /usr/local/bin/skills-rce
+
+# Go toolchain (for running go scripts)
+COPY --from=go-builder /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 RUN mkdir -p /cache/skills
 
