@@ -1,0 +1,480 @@
+openapi: 3.1.0
+info:
+  title: Skill RCE
+  version: 0.1.0
+  description: |-
+    Code execution service for AI agents.
+
+    Upload a skill directory once, then run commands against it as many times as
+    you need. Each job gets its own working directory; the cached skill files are
+    symlinked in read-only. Any new files the job creates come back as base64
+    artifacts in the response.
+
+    There's also a simpler `/run` endpoint for one-off scripts that don't need a
+    skill context.
+
+servers:
+  - url: http://localhost:5580
+
+tags:
+  - name: Health
+    description: Liveness and readiness
+  - name: Execution
+    description: Run ad-hoc code (no skill context)
+  - name: Skills
+    description: Upload, inspect, patch, delete, and run against cached skill directories
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+
+  # --- Health --------------------------------------------------------------
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Health check
+      description: |-
+        Returns service status, supported languages, and which skills are
+        currently cached. Always unauthenticated.
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: healthy
+                version: "0.1.0"
+                languages: [python, node, bash]
+                cached_skills: [generate-file]
+                uptime_seconds: 3600
+
+  # --- Ad-hoc execution ----------------------------------------------------
+  /run:
+    post:
+      tags: [Execution]
+      operationId: runCode
+      summary: Run a script
+      description: |-
+        Write a temp file from `code`, execute it with the requested language
+        runtime, and return stdout/stderr/artifacts. No skill directory is
+        involved -- this is for quick one-off computations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunRequest"
+            example:
+              id: job-abc123
+              language: python
+              code: "import pandas as pd\nprint(pd.DataFrame({'a': [1,2,3]}).to_json())"
+              timeout: 30
+      responses:
+        "200":
+          description: Execution finished (check `status` for success/error/timeout)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecResult"
+        "400":
+          description: Bad request (missing fields, unsupported language, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # --- Skill CRUD ----------------------------------------------------------
+  /skill/{id}:
+    parameters:
+      - $ref: "#/components/parameters/SkillId"
+
+    post:
+      tags: [Skills]
+      operationId: uploadSkill
+      summary: Upload a skill directory
+      description: |-
+        Caches the provided files on disk under the given skill id. If the skill
+        already exists it's fully replaced. The `hash` field lets callers skip
+        re-uploading when the content hasn't changed (compare with GET first).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillUploadRequest"
+            example:
+              hash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              files:
+                "SKILL.md": "IyBNeSBTa2lsbA=="
+                "scripts/run.py": "cHJpbnQoJ2hpJyk="
+      responses:
+        "200":
+          description: Skill cached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillCacheResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags: [Skills]
+      operationId: getSkill
+      summary: Check whether a skill is cached
+      description: |-
+        Returns cache status and the stored hash so callers can decide whether
+        to re-upload.
+      responses:
+        "200":
+          description: Cache status (always 200, check `cached` field)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillCacheStatus"
+              examples:
+                cached:
+                  summary: Skill is cached
+                  value:
+                    name: generate-file
+                    cached: true
+                    hash: "sha256:e3b0c44..."
+                    file_count: 3
+                not_cached:
+                  summary: Skill not found
+                  value:
+                    name: generate-file
+                    cached: false
+
+    patch:
+      tags: [Skills]
+      operationId: updateSkill
+      summary: Patch files in a cached skill
+      description: |-
+        Overwrites only the listed files without touching the rest.
+        Useful when a single script changed and you don't want to re-upload
+        the whole directory.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillUpdateRequest"
+      responses:
+        "200":
+          description: Skill updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillCacheResponse"
+        "404":
+          description: Skill not cached -- upload it first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Skills]
+      operationId: deleteSkill
+      summary: Delete a cached skill
+      responses:
+        "200":
+          description: Skill removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillDeleteResponse"
+        "404":
+          description: Skill not cached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # --- Skill execution -----------------------------------------------------
+  /skill/{id}/run:
+    parameters:
+      - $ref: "#/components/parameters/SkillId"
+    post:
+      tags: [Skills]
+      operationId: runSkill
+      summary: Run a command inside a cached skill
+      description: |-
+        The hot path. The skill directory is already on disk, so you only send
+        the shell command and any per-job input files. The working directory
+        gets the skill files symlinked in (read-only) plus your input files,
+        then your command runs there.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillRunRequest"
+            example:
+              id: job-def456
+              command: "python scripts/run.py input.csv"
+              input_files:
+                "input.csv": "YSxiCjEsMgozLDQK"
+              timeout: 60
+      responses:
+        "200":
+          description: Execution finished (check `status`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecResult"
+              example:
+                id: job-def456
+                status: success
+                exit_code: 0
+                stdout: "done\n"
+                stderr: ""
+                duration_ms: 1234
+                artifacts:
+                  - name: output.png
+                    mime: image/png
+                    size: 34512
+                    content: "iVBORw0KGgo..."
+        "404":
+          description: Skill not cached -- upload it first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+components:
+  parameters:
+    SkillId:
+      name: id
+      in: path
+      required: true
+      description: |-
+        Alphanumeric skill identifier used as the cache key.
+        Convention is lowercase-kebab, e.g. `generate-file`.
+      schema:
+        type: string
+        minLength: 1
+        pattern: "^[a-zA-Z0-9._:-]+$"
+
+  schemas:
+
+    # --- Health ---
+    HealthResponse:
+      type: object
+      required: [status, version, languages, cached_skills, uptime_seconds]
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        version:
+          type: string
+          example: "0.1.0"
+        languages:
+          type: array
+          items:
+            type: string
+          description: Language runtimes available on this instance
+        cached_skills:
+          type: array
+          items:
+            type: string
+          description: Skill ids currently in the cache
+        uptime_seconds:
+          type: integer
+          minimum: 0
+
+    # --- Ad-hoc execution ---
+    RunRequest:
+      type: object
+      required: [id, language, code]
+      properties:
+        id:
+          type: string
+          description: Caller-provided job id, echoed back in the response
+        language:
+          type: string
+          enum: [python, node, bash, php, ruby, go]
+          description: Which runtime to use
+        code:
+          type: string
+          description: Full script source to execute
+        files:
+          $ref: "#/components/schemas/Base64FileMap"
+        timeout:
+          type: integer
+          minimum: 1
+          maximum: 300
+          default: 30
+          description: Max wall-clock seconds before the process is killed
+        env:
+          $ref: "#/components/schemas/EnvMap"
+
+    # --- Skill upload / update ---
+    SkillUploadRequest:
+      type: object
+      required: [hash, files]
+      properties:
+        hash:
+          type: string
+          pattern: "^sha256:[a-fA-F0-9]{64}$"
+          description: SHA-256 of the directory contents, for cache-busting
+        files:
+          $ref: "#/components/schemas/Base64FileMap"
+
+    SkillUpdateRequest:
+      type: object
+      required: [hash, files]
+      properties:
+        hash:
+          type: string
+          pattern: "^sha256:[a-fA-F0-9]{64}$"
+          description: New hash after the patch is applied
+        files:
+          $ref: "#/components/schemas/Base64FileMap"
+
+    # --- Skill run ---
+    SkillRunRequest:
+      type: object
+      required: [id, command]
+      properties:
+        id:
+          type: string
+          description: Caller-provided job id
+        command:
+          type: string
+          description: Shell command to run (paths are relative to the skill root)
+        input_files:
+          $ref: "#/components/schemas/Base64FileMap"
+        timeout:
+          type: integer
+          minimum: 1
+          maximum: 300
+          default: 30
+        env:
+          $ref: "#/components/schemas/EnvMap"
+
+    # --- Skill cache responses ---
+    SkillCacheStatus:
+      type: object
+      required: [name, cached]
+      properties:
+        name:
+          type: string
+        cached:
+          type: boolean
+        hash:
+          type: string
+          description: Only present when `cached` is true
+        file_count:
+          type: integer
+          minimum: 0
+          description: Only present when `cached` is true
+
+    SkillCacheResponse:
+      type: object
+      required: [name, hash, status, file_count]
+      properties:
+        name:
+          type: string
+        hash:
+          type: string
+        status:
+          type: string
+          enum: [cached, updated]
+        file_count:
+          type: integer
+          minimum: 0
+
+    SkillDeleteResponse:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [deleted]
+
+    # --- Execution result (shared by /run and /skill/{id}/run) ---
+    ExecResult:
+      type: object
+      required: [id, status, exit_code, stdout, stderr, duration_ms, artifacts]
+      properties:
+        id:
+          type: string
+          description: Echo of the request id
+        status:
+          type: string
+          enum: [success, error, timeout]
+        exit_code:
+          type: integer
+          description: Process exit code. -1 means the job was killed on timeout.
+        stdout:
+          type: string
+          description: Standard output, truncated at 100 KB
+        stderr:
+          type: string
+          description: Standard error, truncated at 100 KB
+        duration_ms:
+          type: integer
+          minimum: 0
+          description: Wall-clock execution time in milliseconds
+        artifacts:
+          type: array
+          description: Files the job created in the working directory
+          items:
+            $ref: "#/components/schemas/Artifact"
+
+    Artifact:
+      type: object
+      required: [name, mime, size, content]
+      properties:
+        name:
+          type: string
+          description: Relative path of the generated file
+        mime:
+          type: string
+          description: Best-guess MIME type based on extension
+        size:
+          type: integer
+          minimum: 0
+          description: Size in bytes
+        content:
+          type: string
+          format: byte
+          description: Base64-encoded file content
+
+    # --- Shared helpers ---
+    Base64FileMap:
+      type: object
+      description: |-
+        Map of relative file paths to base64-encoded content.
+        Directory structure is preserved, e.g. `"scripts/run.py": "<b64>"`.
+      additionalProperties:
+        type: string
+        format: byte
+
+    EnvMap:
+      type: object
+      description: Extra environment variables passed to the subprocess
+      additionalProperties:
+        type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
