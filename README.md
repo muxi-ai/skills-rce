@@ -158,4 +158,4 @@ Optional. Supports `bearer`, `header`, `basic`, or `none` (default).
 
 ## License
 
-ELv2
+Apache License 2.0
