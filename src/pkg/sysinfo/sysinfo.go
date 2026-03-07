@@ -1,7 +1,10 @@
 package sysinfo
 
 import (
+	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -18,10 +21,21 @@ type Resources struct {
 	DiskMB   int64 `json:"disk_mb"`
 }
 
+type Package struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+type Packages struct {
+	Python []Package `json:"python,omitempty"`
+	Node   []Package `json:"node,omitempty"`
+}
+
 type Info struct {
 	Runtimes  []Runtime `json:"runtimes"`
 	Languages []string  `json:"languages"`
 	Resources Resources `json:"resources"`
+	Packages  Packages  `json:"packages"`
 }
 
 var runtimeProbes = []struct {
@@ -64,6 +78,7 @@ func Detect() *Info {
 	}
 
 	info.Resources = detectResources()
+	info.Packages = detectPackages()
 	return info
 }
 
@@ -157,4 +172,53 @@ func detectResources() Resources {
 	r.MemoryMB = detectMemoryMB()
 
 	return r
+}
+
+func detectPackages() Packages {
+	return Packages{
+		Python: detectPythonPackages(),
+		Node:   detectNodePackages(),
+	}
+}
+
+func detectPythonPackages() []Package {
+	out, err := exec.Command("pip3", "list", "--format=json").Output()
+	if err != nil {
+		return nil
+	}
+	var raw []struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil
+	}
+	pkgs := make([]Package, len(raw))
+	for i, r := range raw {
+		pkgs[i] = Package{Name: r.Name, Version: r.Version}
+	}
+	return pkgs
+}
+
+func detectNodePackages() []Package {
+	// Read from the pre-installed bun packages location
+	for _, dir := range []string{"/opt/bun-packages", os.Getenv("NODE_PATH") + "/.."} {
+		pkgFile := filepath.Join(dir, "package.json")
+		data, err := os.ReadFile(pkgFile)
+		if err != nil {
+			continue
+		}
+		var pkg struct {
+			Dependencies map[string]string `json:"dependencies"`
+		}
+		if err := json.Unmarshal(data, &pkg); err != nil {
+			continue
+		}
+		pkgs := make([]Package, 0, len(pkg.Dependencies))
+		for name, version := range pkg.Dependencies {
+			pkgs = append(pkgs, Package{Name: name, Version: strings.TrimPrefix(version, "^")})
+		}
+		return pkgs
+	}
+	return nil
 }

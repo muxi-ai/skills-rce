@@ -36,9 +36,9 @@ paths:
       operationId: getHealth
       summary: Health check
       description: |-
-        Returns service status, detected runtimes and their versions,
-        supported languages, system resources, and which skills are
-        currently cached. Always unauthenticated.
+        Lightweight liveness check. Returns status and version only.
+        Designed for frequent polling by load balancers and healthchecks.
+        Always unauthenticated.
       responses:
         "200":
           description: Healthy
@@ -49,38 +49,61 @@ paths:
               example:
                 status: healthy
                 version: "0.1.0"
+
+  # --- Status --------------------------------------------------------------
+  /status:
+    get:
+      tags: [Health]
+      operationId: getStatus
+      summary: Full server status
+      description: |-
+        Returns everything a client needs to know before sending jobs:
+        detected runtimes and versions, supported languages, system resources
+        (CPU, RAM, disk), installed packages (Python and Node), and cached
+        skills. Call once on connect, not for polling. Always unauthenticated.
+      responses:
+        "200":
+          description: Server status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              example:
+                status: healthy
+                version: "0.1.0"
                 runtimes:
                   - name: python
                     version: "3.11.0"
                   - name: bun
-                    version: "1.1.30"
+                    version: "1.3.10"
                   - name: bash
                     version: "5.1.16"
                   - name: go
-                    version: null
-                  - name: php
-                    version: null
-                  - name: ruby
-                    version: null
-                  - name: perl
-                    version: null
-                  - name: lua
-                    version: null
-                  - name: r
-                    version: null
+                    version: "1.26.1"
                   - name: node
-                    version: null
+                    version: "20.20.1"
                   - name: npx
-                    version: null
+                    version: "10.8.2"
                   - name: uv
-                    version: null
+                    version: "0.10.9"
                   - name: pip
-                    version: null
-                languages: [python, javascript, typescript, bash]
+                    version: "22.0.2"
+                languages: [python, javascript, typescript, bash, go, perl]
                 resources:
-                  cpus: 2
-                  memory_mb: 4096
+                  cpus: 4
+                  memory_mb: 8192
                   disk_mb: 20480
+                packages:
+                  python:
+                    - name: numpy
+                      version: "2.4.2"
+                    - name: pandas
+                      version: "3.0.1"
+                  node:
+                    - name: lodash
+                      version: "4.17.21"
+                    - name: axios
+                      version: "1.7.2"
                 cached_skills: []
                 uptime_seconds: 3600
 
@@ -304,7 +327,19 @@ components:
     # --- Health ---
     HealthResponse:
       type: object
-      required: [status, version, runtimes, languages, resources, cached_skills, uptime_seconds]
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        version:
+          type: string
+          example: "0.1.0"
+
+    # --- Status ---
+    StatusResponse:
+      type: object
+      required: [status, version, runtimes, languages, resources, packages, cached_skills, uptime_seconds]
       properties:
         status:
           type: string
@@ -324,6 +359,8 @@ components:
           description: Languages available based on detected runtimes
         resources:
           $ref: "#/components/schemas/ResourceInfo"
+        packages:
+          $ref: "#/components/schemas/PackageInfo"
         cached_skills:
           type: array
           items:
@@ -358,6 +395,29 @@ components:
         disk_mb:
           type: integer
           description: Available disk space in megabytes
+
+    PackageInfo:
+      type: object
+      properties:
+        python:
+          type: array
+          description: Installed Python packages
+          items:
+            $ref: "#/components/schemas/PackageVersion"
+        node:
+          type: array
+          description: Installed Node/Bun packages
+          items:
+            $ref: "#/components/schemas/PackageVersion"
+
+    PackageVersion:
+      type: object
+      required: [name, version]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
 
     # --- Ad-hoc execution ---
     RunRequest:

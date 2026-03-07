@@ -235,6 +235,46 @@ func TestAuthHealthBypassesToken(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("expected 200 for /health without token, got %d", w.Code)
 	}
+
+	// /status should work without auth
+	req = httptest.NewRequest("GET", "/status", nil)
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("expected 200 for /status without token, got %d", w.Code)
+	}
+}
+
+func TestStatusEndpoint(t *testing.T) {
+	s := setupTestServer(t)
+	req := httptest.NewRequest("GET", "/status", nil)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["status"] != "healthy" {
+		t.Fatalf("expected healthy, got %v", resp["status"])
+	}
+	if resp["runtimes"] == nil {
+		t.Fatal("expected runtimes in /status")
+	}
+	if resp["languages"] == nil {
+		t.Fatal("expected languages in /status")
+	}
+	if resp["resources"] == nil {
+		t.Fatal("expected resources in /status")
+	}
+	if resp["packages"] == nil {
+		t.Fatal("expected packages in /status")
+	}
+	if resp["cached_skills"] == nil {
+		t.Fatal("expected cached_skills in /status")
+	}
 }
 
 func TestAuthRejectsWithoutToken(t *testing.T) {

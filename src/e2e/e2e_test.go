@@ -328,9 +328,15 @@ func TestE2EHealthShowsCachedSkills(t *testing.T) {
 		})
 	}
 
-	resp := getJSON(t, base+"/health")
+	resp := getJSON(t, base+"/status")
 	skills := resp["cached_skills"].([]interface{})
 	if len(skills) != 2 {
-		t.Fatalf("expected 2 cached skills in health, got %d", len(skills))
+		t.Fatalf("expected 2 cached skills in status, got %d", len(skills))
+	}
+	if resp["runtimes"] == nil {
+		t.Fatal("expected runtimes in /status")
+	}
+	if resp["packages"] == nil {
+		t.Fatal("expected packages in /status")
 	}
 }

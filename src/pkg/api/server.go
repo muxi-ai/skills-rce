@@ -49,6 +49,7 @@ func (s *Server) setupRoutes() {
 	}
 
 	s.router.HandleFunc("/health", s.handleHealth).Methods("GET")
+	s.router.HandleFunc("/status", s.handleStatus).Methods("GET")
 	s.router.HandleFunc("/run", s.handleRun).Methods("POST")
 	s.router.HandleFunc("/skill/{id}", s.handleSkillUpload).Methods("POST")
 	s.router.HandleFunc("/skill/{id}", s.handleSkillGet).Methods("GET")
@@ -58,6 +59,13 @@ func (s *Server) setupRoutes() {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "healthy",
+		"version": s.version,
+	})
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	uptime := int(time.Since(s.startTime).Seconds())
 	RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":         "healthy",
@@ -65,6 +73,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"runtimes":       s.sysinfo.Runtimes,
 		"languages":      s.sysinfo.Languages,
 		"resources":      s.sysinfo.Resources,
+		"packages":       s.sysinfo.Packages,
 		"cached_skills":  s.cache.List(),
 		"uptime_seconds": uptime,
 	})

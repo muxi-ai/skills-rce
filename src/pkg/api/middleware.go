@@ -11,7 +11,7 @@ import (
 func AuthMiddleware(token string, logger *zerolog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/health" {
+			if r.URL.Path == "/health" || r.URL.Path == "/status" {
 				next.ServeHTTP(w, r)
 				return
 			}
