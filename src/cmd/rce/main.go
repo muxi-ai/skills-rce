@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,9 +18,21 @@ import (
 	"github.com/muxi-ai/skills-rce/pkg/config"
 )
 
-const version = "0.1.0"
+//go:embed version.txt
+var embeddedVersion string
+
+// Set via ldflags: -ldflags "-X main.Version=..."
+var Version string
+
+func getVersion() string {
+	if Version != "" {
+		return Version
+	}
+	return strings.TrimSpace(embeddedVersion)
+}
 
 func main() {
+	version := getVersion()
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
 		With().Timestamp().Str("service", "skills-rce").Logger()
 

@@ -11,6 +11,11 @@ src/skills-rce
 *.test
 *.out
 
+# SIF builds
+sif-builds/
+*.sif
+*.tar
+
 # IDE
 .idea/
 .vscode/

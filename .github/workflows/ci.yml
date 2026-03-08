@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: src/go.sum
+
+      - name: Run go vet
+        working-directory: src
+        run: go vet ./...
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: src/go.sum
+
+      - name: Run unit tests
+        working-directory: src
+        run: go test ./pkg/... -v -count=1
+
+      - name: Run e2e tests
+        working-directory: src
+        run: go test ./e2e/... -v -count=1
+
+  build-docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: skills-rce:test
+          no-cache: true
+
+      - name: Test Docker image
+        run: |
+          docker run -d --name test-rce -p 7891:7891 skills-rce:test
+          sleep 3
+          curl -sf http://localhost:7891/health | jq .
+          docker stop test-rce

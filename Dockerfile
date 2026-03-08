@@ -3,6 +3,7 @@ FROM golang:1.26-alpine AS go-builder
 WORKDIR /build
 COPY src/go.mod src/go.sum ./
 RUN go mod download
+COPY .version ./cmd/rce/version.txt
 COPY src/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
     -ldflags="-w -s" -o skills-rce ./cmd/rce
