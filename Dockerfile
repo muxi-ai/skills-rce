@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
 # --------------------------------------------------------------------------
 # Python packages -- build in a full Ubuntu, strip, copy to final
 # --------------------------------------------------------------------------
-FROM ubuntu:22.04 AS python-builder
+FROM ubuntu:24.04 AS python-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -44,7 +44,7 @@ RUN find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || tru
 # --------------------------------------------------------------------------
 # Bun + JS packages
 # --------------------------------------------------------------------------
-FROM ubuntu:22.04 AS bun-builder
+FROM ubuntu:24.04 AS bun-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -64,7 +64,7 @@ RUN mkdir -p /opt/bun-packages && cd /opt/bun-packages \
 # --------------------------------------------------------------------------
 # Final image -- only runtime deps, no compilers or build tools
 # --------------------------------------------------------------------------
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
