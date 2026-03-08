@@ -2,6 +2,13 @@
 
 Code execution service for AI agent skills. Runs scripts in isolated subprocesses with skill directory caching -- upload a skill once, execute against it many times.
 
+> [!IMPORTANT]
+> ## MUXI Ecosystem
+>
+> This repository is part of the larger MUXI ecosystem.
+>
+> **📋 Complete architectural overview:** See [muxi/ARCHITECTURE.md](https://github.com/muxi-ai/muxi/blob/main/ARCHITECTURE.md) - explains how core repositories fit together, dependencies, status, and roadmap.
+
 This repo contains:
 
 1. **The RCE server** -- a standalone Go binary that exposes an HTTP API for code execution. Install it anywhere, point your agent runtime at it.
