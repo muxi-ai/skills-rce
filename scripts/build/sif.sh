@@ -75,11 +75,14 @@ elif command -v apptainer &> /dev/null; then
     apptainer build "$SIF_FILE" "docker-archive://$TARBALL"
 else
     echo "Using Docker-wrapped Singularity..."
+    # Paths must be relative to PROJECT_ROOT (mounted as /work)
+    REL_TARBALL="skills-rce-$VERSION.tar"
+    REL_SIF="sif-builds/skills-rce-$VERSION-linux-$ARCH.sif"
     docker run --rm --privileged \
-        -v "$(pwd):/work" \
+        -v "$PROJECT_ROOT:/work" \
         -w /work \
         ghcr.io/muxi-ai/runtime-runner:latest \
-        build "$SIF_FILE" "docker-archive://$TARBALL"
+        build "$REL_SIF" "docker-archive://$REL_TARBALL"
 fi
 
 cp "$SIF_FILE" "$LATEST_SIF"
